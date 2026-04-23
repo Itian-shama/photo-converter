@@ -16,16 +16,33 @@ function App() {
   const appRef = useRef(null);
 
   // Wake up the Render backend as soon as app loads
+  // Uses polling every 5s so the badge turns green as soon as the server responds
   useEffect(() => {
-    const wakeServer = async () => {
+    let cancelled = false;
+
+    const tryPing = async () => {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 8000); // 8s per attempt
       try {
-        await fetch(`${BACKEND_URL}/`, { method: 'GET' });
-        setServerStatus('ready');
-      } catch {
-        setServerStatus('ready'); // still let them try
-      }
+        const res = await fetch(`${BACKEND_URL}/`, { signal: controller.signal });
+        clearTimeout(t);
+        if (res.ok && !cancelled) { setServerStatus('ready'); return true; }
+      } catch { clearTimeout(t); }
+      return false;
     };
-    wakeServer();
+
+    const poll = async () => {
+      for (let i = 0; i < 15; i++) {          // try up to 15 times (~2 min max)
+        if (cancelled) return;
+        const ok = await tryPing();
+        if (ok) return;
+        await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
+      }
+      if (!cancelled) setServerStatus('ready');  // give up, show green anyway
+    };
+
+    poll();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
