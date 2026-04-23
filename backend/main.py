@@ -1,11 +1,21 @@
-import io
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-from rembg import remove
+
 app = FastAPI()
+
+# rembg is lazy-loaded only when remove-bg is called
+# to avoid OOM on startup (u2netp model = 4.7MB vs u2net = 176MB)
+_rembg_session = None
+
+def get_rembg_session():
+    global _rembg_session
+    if _rembg_session is None:
+        from rembg import new_session
+        _rembg_session = new_session("u2netp")
+    return _rembg_session
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,11 +62,10 @@ async def convert_to_sketch(file: UploadFile = File(...)):
 
 @app.post("/api/remove-bg")
 async def remove_background(file: UploadFile = File(...)):
+    from rembg import remove
     contents = await file.read()
-    
-    # Use rembg for robust background removal
-    output_bytes = remove(contents)
-    
+    session = get_rembg_session()
+    output_bytes = remove(contents, session=session)
     return Response(content=output_bytes, media_type="image/png")
 
 def color_quantization(img, k):
