@@ -55,7 +55,7 @@ function App() {
     if (activeMode === 'painting') endpoint = '/api/painting';
 
     try {
-      const BACKEND_URL = 'http://localhost:5000';
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         body: formData,
