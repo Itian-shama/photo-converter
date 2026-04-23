@@ -1,16 +1,32 @@
 import { useState, useRef, useEffect } from 'react';
 import './index.css';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 function App() {
   const [originalImage, setOriginalImage] = useState(null);
   const [resultImage, setResultImage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeMode, setActiveMode] = useState('sketch');
+  const [serverStatus, setServerStatus] = useState('waking'); // 'waking' | 'ready'
   const fileInputRef = useRef(null);
   
   // Vanta background
   const [vantaEffect, setVantaEffect] = useState(null);
   const appRef = useRef(null);
+
+  // Wake up the Render backend as soon as app loads
+  useEffect(() => {
+    const wakeServer = async () => {
+      try {
+        await fetch(`${BACKEND_URL}/`, { method: 'GET' });
+        setServerStatus('ready');
+      } catch {
+        setServerStatus('ready'); // still let them try
+      }
+    };
+    wakeServer();
+  }, []);
 
   useEffect(() => {
     if (!vantaEffect && appRef.current && window.VANTA) {
@@ -54,8 +70,10 @@ function App() {
     if (activeMode === 'anime') endpoint = '/api/anime';
     if (activeMode === 'painting') endpoint = '/api/painting';
 
+    // Use global BACKEND_URL defined at top
+
     try {
-      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      // BACKEND_URL is defined at module level
       const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         body: formData,
@@ -80,7 +98,22 @@ function App() {
       <div className="app-wrapper" style={{ minHeight: '100vh', width: '100vw', padding: '2rem', boxSizing: 'border-box', overflowX: 'hidden', position: 'relative' }}>
       <div className="app-container" style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem', background: 'rgba(255, 255, 255, 0.85)', borderRadius: '20px', backdropFilter: 'blur(10px)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', position: 'relative', zIndex: 1 }}>
       <h1 style={{ textAlign: 'center', color: '#333' }}>Creative Studio</h1>
-      <p className="subtitle" style={{ textAlign: 'center', color: '#555', marginBottom: '2rem' }}>Art Filter Engine & Background Removal</p>
+      <p className="subtitle" style={{ textAlign: 'center', color: '#555', marginBottom: '0.5rem' }}>Art Filter Engine &amp; Background Removal</p>
+
+      {/* Server status indicator */}
+      <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+        {serverStatus === 'waking' ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fff3cd', color: '#856404', padding: '4px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffc107', display: 'inline-block', animation: 'pulse 1.2s infinite' }}></span>
+            Waking up server… first request may take ~30s
+          </span>
+        ) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#d1fae5', color: '#065f46', padding: '4px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+            Server ready — upload &amp; convert!
+          </span>
+        )}
+      </div>
 
       <div className="options">
         <div 
