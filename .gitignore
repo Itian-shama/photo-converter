@@ -1,0 +1,20 @@
+# Python
+backend/venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Node
+frontend/node_modules/
+
+# Test files
+test_*.py
+test_*.jpg
+test_out_*.jpg
+
+# Misc
+.DS_Store
+*.log
