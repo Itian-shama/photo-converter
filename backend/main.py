@@ -29,6 +29,10 @@ app.add_middleware(
 def read_root():
     return {"message": "Image Editing Backend"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 @app.post("/api/sketch")
 async def convert_to_sketch(file: UploadFile = File(...)):
     contents = await file.read()

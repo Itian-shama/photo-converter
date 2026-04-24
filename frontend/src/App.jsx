@@ -8,7 +8,8 @@ function App() {
   const [resultImage, setResultImage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeMode, setActiveMode] = useState('sketch');
-  const [serverStatus, setServerStatus] = useState('waking'); // 'waking' | 'ready'
+  const [serverStatus, setServerStatus] = useState('waking'); // 'waking' | 'ready' | 'failed'
+  const [errorMsg, setErrorMsg] = useState(null);
   const fileInputRef = useRef(null);
   
   // Vanta background
@@ -16,33 +17,38 @@ function App() {
   const appRef = useRef(null);
 
   // Wake up the Render backend as soon as app loads
-  // Uses polling every 5s so the badge turns green as soon as the server responds
-  useEffect(() => {
+  const startPolling = () => {
+    setServerStatus('waking');
     let cancelled = false;
 
     const tryPing = async () => {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 8000); // 8s per attempt
+      const t = setTimeout(() => controller.abort(), 10000); // 10s per attempt
       try {
         const res = await fetch(`${BACKEND_URL}/`, { signal: controller.signal });
         clearTimeout(t);
-        if (res.ok && !cancelled) { setServerStatus('ready'); return true; }
+        if (res.ok) { setServerStatus('ready'); return true; }
       } catch { clearTimeout(t); }
       return false;
     };
 
     const poll = async () => {
-      for (let i = 0; i < 15; i++) {          // try up to 15 times (~2 min max)
+      for (let i = 0; i < 20; i++) {          // try up to 20 times (~3.5 min max)
         if (cancelled) return;
         const ok = await tryPing();
         if (ok) return;
-        await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
+        await new Promise(r => setTimeout(r, 8000)); // wait 8s before retry
       }
-      if (!cancelled) setServerStatus('ready');  // give up, show green anyway
+      if (!cancelled) setServerStatus('failed');  // genuinely could not reach server
     };
 
     poll();
     return () => { cancelled = true; };
+  };
+
+  useEffect(() => {
+    const cleanup = startPolling();
+    return cleanup;
   }, []);
 
   useEffect(() => {
@@ -77,6 +83,7 @@ function App() {
     
     setIsLoading(true);
     setResultImage(null);
+    setErrorMsg(null);
 
     const file = fileInputRef.current.files[0];
     const formData = new FormData();
@@ -87,10 +94,7 @@ function App() {
     if (activeMode === 'anime') endpoint = '/api/anime';
     if (activeMode === 'painting') endpoint = '/api/painting';
 
-    // Use global BACKEND_URL defined at top
-
     try {
-      // BACKEND_URL is defined at module level
       const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         body: formData,
@@ -100,10 +104,17 @@ function App() {
         const blob = await response.blob();
         setResultImage(URL.createObjectURL(blob));
       } else {
-        console.error("Failed to process image");
+        const text = await response.text().catch(() => '');
+        setErrorMsg(`Server error ${response.status}: ${text || 'Image processing failed. Please try again.'}`);
       }
     } catch (error) {
-      console.error("Error processing image:", error);
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setErrorMsg('Cannot reach the server. The backend may be asleep — please wait and try again.');
+        setServerStatus('waking');
+        startPolling();
+      } else {
+        setErrorMsg(`Error: ${error.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -119,18 +130,33 @@ function App() {
 
       {/* Server status indicator */}
       <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-        {serverStatus === 'waking' ? (
+        {serverStatus === 'waking' && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fff3cd', color: '#856404', padding: '4px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffc107', display: 'inline-block', animation: 'pulse 1.2s infinite' }}></span>
-            Waking up server… first request may take ~30s
+            Waking up server… please wait (~30–60 sec)
           </span>
-        ) : (
+        )}
+        {serverStatus === 'ready' && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#d1fae5', color: '#065f46', padding: '4px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
             Server ready — upload &amp; convert!
           </span>
         )}
+        {serverStatus === 'failed' && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fee2e2', color: '#991b1b', padding: '4px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer' }}
+            onClick={startPolling}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+            Server unreachable — click to retry
+          </span>
+        )}
       </div>
+
+      {/* Error message */}
+      {errorMsg && (
+        <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 16px', borderRadius: '10px', marginBottom: '1rem', fontSize: '0.9rem', textAlign: 'center' }}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       <div className="options">
         <div 
